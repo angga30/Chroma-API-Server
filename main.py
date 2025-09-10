@@ -1,9 +1,10 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
-from typing import List, Optional
+from pydantic import BaseModel, Field, validator
+from typing import List, Optional, Dict, Any
 import chromadb
 from chromadb.config import Settings
 import uuid
+from chunkers import SmartChunker
 
 app = FastAPI()
 
@@ -14,6 +15,24 @@ class Document(BaseModel):
     uid: str
     content: str
     metadata: dict = Field(default_factory=dict)
+    content_type: Optional[str] = None
+    chunk_size: int = 1000
+    chunk_overlap: int = 200
+    
+    @validator('content_type', pre=True, always=True)
+    def verify_content_type(cls, content_type, values):
+        # If content_type is provided, use it
+        if content_type is not None:
+            return content_type
+        
+        # If content is available, detect content_type from it
+        if 'content' in values and values['content']:
+            smart_chunker = SmartChunker()
+            detected_type = smart_chunker.detect_content_type(values['content'])
+            return detected_type
+        
+        # Default to text if no content is available
+        return "text"
 
 class BatchDocumentRequest(BaseModel):
     documents: List[Document]
@@ -36,21 +55,54 @@ async def add_documents(request: BatchDocumentRequest):
     try:
         collection = get_or_create_collection(request.collection_name)
         print(request.documents)
-        # Generate unique IDs for each document
-        doc_ids = [doc.uid for doc in request.documents]
         
-        # Prepare batch data
-        documents = [doc.content for doc in request.documents]
-        metadatas = [doc.metadata for doc in request.documents]
+        # Initialize smart chunker
+        smart_chunker = SmartChunker()
         
-        # Add documents to ChromaDB
-        collection.add(
-            documents=documents,
-            metadatas=metadatas,
-            ids=doc_ids
-        )
+        # Process each document with smart chunking
+        all_chunks = []
+        all_chunk_ids = []
+        all_chunk_contents = []
+        all_chunk_metadatas = []
         
-        return {"ids": doc_ids, "message": "Documents added successfully"}
+        for doc in request.documents:
+            # Apply smart chunking
+            chunks = smart_chunker.chunk(
+                content=doc.content,
+                content_type=doc.content_type,
+                chunk_size=doc.chunk_size,
+                chunk_overlap=doc.chunk_overlap
+            )
+            
+            # Process each chunk
+            for chunk in chunks:
+                # Generate a unique ID for each chunk
+                chunk_id = f"{doc.uid}-{chunk['metadata']['chunk_id']}"
+                
+                # Combine document metadata with chunk metadata
+                combined_metadata = doc.metadata.copy()
+                combined_metadata.update(chunk['metadata'])
+                combined_metadata['parent_document_id'] = doc.uid
+                
+                all_chunks.append({
+                    "id": chunk_id,
+                    "content": chunk['content'],
+                    "metadata": combined_metadata
+                })
+                print(all_chunks)
+                all_chunk_ids.append(chunk_id)
+                all_chunk_contents.append(chunk['content'])
+                all_chunk_metadatas.append(combined_metadata)
+        
+        # Add chunks to ChromaDB
+        if all_chunks:
+            collection.add(
+                documents=all_chunk_contents,
+                metadatas=all_chunk_metadatas,
+                ids=all_chunk_ids
+            )
+        
+        return {"ids": all_chunk_ids, "message": f"Documents processed and {len(all_chunks)} chunks added successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -62,14 +114,70 @@ async def update_documents(collection_name: str, documents: List[Document], doc_
             
         collection = get_or_create_collection(collection_name)
         
-        # Update documents in ChromaDB
-        collection.update(
-            ids=doc_ids,
-            documents=[doc.content for doc in documents],
-            metadatas=[doc.metadata for doc in documents]
-        )
+        # First, delete existing chunks for these documents
+        for doc_id in doc_ids:
+            # Find all chunks with this parent document ID
+            try:
+                results = collection.query(
+                    query_texts=["dummy query"],  # We're not actually searching by content
+                    where={"parent_document_id": doc_id},
+                    n_results=100  # Get all chunks for this document
+                )
+                
+                if results and results['ids'] and results['ids'][0]:
+                    # Delete all chunks for this document
+                    collection.delete(ids=results['ids'][0])
+            except Exception as e:
+                # If query fails, it might be because the document doesn't exist or has no chunks
+                print(f"Error finding chunks for document {doc_id}: {str(e)}")
         
-        return {"message": "Documents updated successfully"}
+        # Initialize smart chunker
+        smart_chunker = SmartChunker()
+        
+        # Process each document with smart chunking
+        all_chunks = []
+        all_chunk_ids = []
+        all_chunk_contents = []
+        all_chunk_metadatas = []
+        
+        for i, doc in enumerate(documents):
+            # Apply smart chunking
+            chunks = smart_chunker.chunk(
+                content=doc.content,
+                content_type=doc.content_type,
+                chunk_size=doc.chunk_size,
+                chunk_overlap=doc.chunk_overlap
+            )
+            
+            # Process each chunk
+            for chunk in chunks:
+                # Generate a unique ID for each chunk
+                chunk_id = f"{doc_ids[i]}-{chunk['metadata']['chunk_id']}"
+                
+                # Combine document metadata with chunk metadata
+                combined_metadata = doc.metadata.copy()
+                combined_metadata.update(chunk['metadata'])
+                combined_metadata['parent_document_id'] = doc_ids[i]
+                
+                all_chunks.append({
+                    "id": chunk_id,
+                    "content": chunk['content'],
+                    "metadata": combined_metadata
+                })
+                
+                all_chunk_ids.append(chunk_id)
+                all_chunk_contents.append(chunk['content'])
+                all_chunk_metadatas.append(combined_metadata)
+        
+        # Add new chunks to ChromaDB
+        if all_chunks:
+            collection.add(
+                documents=all_chunk_contents,
+                metadatas=all_chunk_metadatas,
+                ids=all_chunk_ids
+            )
+        
+        return {"message": f"Documents updated successfully with {len(all_chunks)} new chunks"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
