@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import re
+import json
 from bs4 import BeautifulSoup
 import uuid
 from typing import List, Dict, Any, Tuple, Optional
@@ -373,6 +374,171 @@ class CodeChunker(BaseChunker):
         
         return chunks
 
+class JsonChunker(BaseChunker):
+    """Chunker for JSON content"""
+    
+    def _validate_metadata_value(self, value):
+        """Ensure metadata value is a valid type (str, int, float, bool, None)"""
+        if value is None or isinstance(value, (str, int, float, bool)):
+            return value
+        # Convert lists to string
+        elif isinstance(value, list):
+            return ' '.join(str(item) for item in value)
+        # Convert other types to string
+        else:
+            return str(value)
+    
+    def chunk(self, content: str, chunk_size: int = 1000, chunk_overlap: int = 200) -> List[Dict[str, Any]]:
+        """Split JSON content into chunks based on structure and size"""
+        chunks = []
+        
+        try:
+            # Parse JSON content
+            json_data = json.loads(content)
+            
+            # Extract metadata if available
+            metadata = {
+                "chunk_type": self._validate_metadata_value("json")
+            }
+            
+            # Handle different JSON structures
+            if isinstance(json_data, dict):
+                # Process dictionary
+                self._process_dict(json_data, chunks, metadata, chunk_size)
+            elif isinstance(json_data, list):
+                # Process list
+                self._process_list(json_data, chunks, metadata, chunk_size)
+            else:
+                # Simple value, just add as a single chunk
+                chunks.append({
+                    "content": content,
+                    "metadata": {
+                        "chunk_type": self._validate_metadata_value("json"),
+                        "chunk_id": str(uuid.uuid4()),
+                        "chunk_index": 0
+                    }
+                })
+        except json.JSONDecodeError:
+            # If JSON parsing fails, fall back to TextChunker
+            text_chunker = TextChunker()
+            return text_chunker.chunk(content, chunk_size, chunk_overlap)
+            
+        return chunks
+    
+    def _process_dict(self, json_dict: Dict, chunks: List[Dict[str, Any]], base_metadata: Dict[str, Any], chunk_size: int):
+        """Process a dictionary and create chunks"""
+        current_chunk = {}
+        current_size = 0
+        
+        for key, value in json_dict.items():
+            # Convert the key-value pair to a string representation
+            item_str = json.dumps({key: value})
+            item_size = len(item_str)
+            
+            if current_size + item_size <= chunk_size:
+                # Add to current chunk
+                current_chunk[key] = value
+                current_size += item_size
+            else:
+                # Current chunk is full, add it to chunks
+                if current_chunk:
+                    metadata = base_metadata.copy()
+                    metadata.update({
+                        "chunk_id": str(uuid.uuid4()),
+                        "chunk_index": len(chunks)
+                    })
+                    
+                    chunks.append({
+                        "content": json.dumps(current_chunk),
+                        "metadata": metadata
+                    })
+                    
+                    # Start a new chunk
+                    current_chunk = {key: value}
+                    current_size = item_size
+                else:
+                    # Item is larger than chunk_size, add it as a separate chunk
+                    metadata = base_metadata.copy()
+                    metadata.update({
+                        "chunk_id": str(uuid.uuid4()),
+                        "chunk_index": len(chunks)
+                    })
+                    
+                    chunks.append({
+                        "content": item_str,
+                        "metadata": metadata
+                    })
+        
+        # Add the last chunk if not empty
+        if current_chunk:
+            metadata = base_metadata.copy()
+            metadata.update({
+                "chunk_id": str(uuid.uuid4()),
+                "chunk_index": len(chunks)
+            })
+            
+            chunks.append({
+                "content": json.dumps(current_chunk),
+                "metadata": metadata
+            })
+    
+    def _process_list(self, json_list: List, chunks: List[Dict[str, Any]], base_metadata: Dict[str, Any], chunk_size: int):
+        """Process a list and create chunks"""
+        current_chunk = []
+        current_size = 0
+        
+        for item in json_list:
+            # Convert the item to a string representation
+            item_str = json.dumps(item)
+            item_size = len(item_str)
+            
+            if current_size + item_size <= chunk_size:
+                # Add to current chunk
+                current_chunk.append(item)
+                current_size += item_size
+            else:
+                # Current chunk is full, add it to chunks
+                if current_chunk:
+                    metadata = base_metadata.copy()
+                    metadata.update({
+                        "chunk_id": str(uuid.uuid4()),
+                        "chunk_index": len(chunks)
+                    })
+                    
+                    chunks.append({
+                        "content": json.dumps(current_chunk),
+                        "metadata": metadata
+                    })
+                    
+                    # Start a new chunk
+                    current_chunk = [item]
+                    current_size = item_size
+                else:
+                    # Item is larger than chunk_size, add it as a separate chunk
+                    metadata = base_metadata.copy()
+                    metadata.update({
+                        "chunk_id": str(uuid.uuid4()),
+                        "chunk_index": len(chunks)
+                    })
+                    
+                    chunks.append({
+                        "content": item_str,
+                        "metadata": metadata
+                    })
+        
+        # Add the last chunk if not empty
+        if current_chunk:
+            metadata = base_metadata.copy()
+            metadata.update({
+                "chunk_id": str(uuid.uuid4()),
+                "chunk_index": len(chunks)
+            })
+            
+            chunks.append({
+                "content": json.dumps(current_chunk),
+                "metadata": metadata
+            })
+
 class SmartChunker:
     """Smart chunker that detects content type and uses appropriate chunker"""
     
@@ -392,6 +558,20 @@ class SmartChunker:
         # Check if content is HTML
         if re.search(r'<!DOCTYPE\s+html|<html|<body|<div|<p>|<head>', content, re.IGNORECASE):
             return "html"
+        
+        # Check if content is JSON
+        # Trim whitespace at the beginning and end
+        trimmed_content = content.strip()
+        # Check if content starts with { or [ and ends with } or ]
+        if (trimmed_content.startswith('{') and trimmed_content.endswith('}')) or \
+           (trimmed_content.startswith('[') and trimmed_content.endswith(']')):
+            try:
+                # Try to parse as JSON
+                json.loads(trimmed_content)
+                return "json"
+            except json.JSONDecodeError:
+                # Not valid JSON
+                pass
         
         # Check if content is code
         code_patterns = [
@@ -422,6 +602,8 @@ class SmartChunker:
             chunker = HTMLChunker()
         elif content_type == "code":
             chunker = CodeChunker()
+        elif content_type == "json":
+            chunker = JsonChunker()
         else:  # Default to text
             chunker = TextChunker()
         

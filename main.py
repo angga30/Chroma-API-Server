@@ -96,7 +96,7 @@ async def add_documents(request: BatchDocumentRequest):
         
         # Add chunks to ChromaDB
         if all_chunks:
-            collection.add(
+            collection.upsert(
                 documents=all_chunk_contents,
                 metadatas=all_chunk_metadatas,
                 ids=all_chunk_ids
