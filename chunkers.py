@@ -387,14 +387,46 @@ class JsonChunker(BaseChunker):
         # Convert other types to string
         else:
             return str(value)
+            
+    def _extract_json(self, content: str) -> str:
+        """Extract JSON from content that might be mixed with text"""
+        # First try the entire content as JSON
+        trimmed_content = content.strip()
+        try:
+            if (trimmed_content.startswith('{') and trimmed_content.endswith('}')) or \
+               (trimmed_content.startswith('[') and trimmed_content.endswith(']')):
+                json.loads(trimmed_content)
+                return trimmed_content
+        except json.JSONDecodeError:
+            pass
+            
+        # Try to find JSON patterns in the content
+        json_pattern = re.compile(r'(\{[\s\S]*?\}|\[[\s\S]*?\])')
+        matches = json_pattern.findall(trimmed_content)
+        
+        for potential_json in matches:
+            try:
+                json.loads(potential_json)
+                return potential_json  # Return the first valid JSON found
+            except json.JSONDecodeError:
+                continue
+                
+        return ""  # No valid JSON found
     
     def chunk(self, content: str, chunk_size: int = 1000, chunk_overlap: int = 200) -> List[Dict[str, Any]]:
         """Split JSON content into chunks based on structure and size"""
         chunks = []
         
+        # Extract JSON from content if it's mixed with text
+        json_content = self._extract_json(content)
+        if not json_content:
+            # If no valid JSON found, fall back to TextChunker
+            text_chunker = TextChunker()
+            return text_chunker.chunk(content, chunk_size, chunk_overlap)
+        
         try:
             # Parse JSON content
-            json_data = json.loads(content)
+            json_data = json.loads(json_content)
             
             # Extract metadata if available
             metadata = {
@@ -562,7 +594,8 @@ class SmartChunker:
         # Check if content is JSON
         # Trim whitespace at the beginning and end
         trimmed_content = content.strip()
-        # Check if content starts with { or [ and ends with } or ]
+        
+        # Case 1: Pure JSON - Check if content starts with { or [ and ends with } or ]
         if (trimmed_content.startswith('{') and trimmed_content.endswith('}')) or \
            (trimmed_content.startswith('[') and trimmed_content.endswith(']')):
             try:
@@ -572,6 +605,17 @@ class SmartChunker:
             except json.JSONDecodeError:
                 # Not valid JSON
                 pass
+                
+        # Case 2: JSON concatenated with text - Try to find JSON patterns in the content
+        json_pattern = re.compile(r'(\{[\s\S]*?\}|\[[\s\S]*?\])')
+        matches = json_pattern.findall(trimmed_content)
+        
+        for potential_json in matches:
+            try:
+                json.loads(potential_json)
+                return "json"  # Found valid JSON within the content
+            except json.JSONDecodeError:
+                continue  # Try next match
         
         # Check if content is code
         code_patterns = [
