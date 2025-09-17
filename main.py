@@ -214,7 +214,8 @@ async def search_similarity(request: SearchRequest):
         
         # Only include results that meet the similarity threshold
         for i, distance in enumerate(results['distances'][0]):
-            if 1 - distance >= request.threshold:  # Convert distance to similarity score
+            # if 1 - distance >= request.threshold:  # Convert distance to similarity score
+            if True:  # Convert distance to similarity score
                 filtered_results['ids'].append(results['ids'][0][i])
                 filtered_results['distances'].append(results['distances'][0][i])
                 filtered_results['metadatas'].append(results['metadatas'][0][i])
