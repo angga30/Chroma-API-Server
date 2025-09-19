@@ -19,10 +19,15 @@ class ChromaDBService:
     def get_or_create_collection(self, name: str):
         """Get an existing collection or create a new one if it doesn't exist."""
         try:
-            return self.client.get_collection(
-                name=name,
-                embedding_function=self.embedding_function
-            )
+            if name not in ["help-article"]:
+                return self.client.get_collection(
+                    name=name,
+                    embedding_function=self.embedding_function
+                )
+            else:
+                return self.client.get_collection(
+                    name=name,
+                )
         except:
             return self.client.create_collection(
                 name=name,
