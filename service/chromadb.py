@@ -108,7 +108,8 @@ class ChromaDBService:
         }
         
         for i, distance in enumerate(results['distances'][0]):
-            if 1 - distance >= threshold:
+            # if 1 - distance >= threshold:
+            if True:
                 filtered_results['ids'].append(results['ids'][0][i])
                 filtered_results['distances'].append(results['distances'][0][i])
                 filtered_results['metadatas'].append(results['metadatas'][0][i])
