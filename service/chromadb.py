@@ -7,7 +7,10 @@ class ChromaDBService:
     def __init__(self):
         self.client = chromadb.HttpClient(
             host=settings.CHROMA_HOST,
-            port=settings.CHROMA_PORT
+            port=settings.CHROMA_PORT,
+            settings=chromadb.config.Settings(
+                anonymized_telemetry=False
+            )
         )
         self.embedding_function = None
         if settings.OPENAI_API_KEY:
