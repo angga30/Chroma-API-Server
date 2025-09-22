@@ -4,7 +4,7 @@ from chromadb.utils import embedding_functions
 from config import settings
 
 class ChromaDBService:
-    def __init__(self):
+    def __init__(self, embedding_model=None):
         self.client = chromadb.HttpClient(
             host=settings.CHROMA_HOST,
             port=settings.CHROMA_PORT,
@@ -13,10 +13,10 @@ class ChromaDBService:
             )
         )
         self.embedding_function = None
-        if settings.OPENAI_API_KEY:
+        if settings.OPENAI_API_KEY and embedding_model:
             self.embedding_function = embedding_functions.OpenAIEmbeddingFunction(
                 api_key=settings.OPENAI_API_KEY,
-                model_name=settings.OPENAI_MODEL_NAME
+                model_name=embedding_model or settings.OPENAI_MODEL_NAME
             )
     
     def get_or_create_collection(self, name: str):

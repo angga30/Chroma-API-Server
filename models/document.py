@@ -26,9 +26,11 @@ class Document(BaseModel):
 class BatchDocumentRequest(BaseModel):
     documents: List[Document]
     collection_name: str
+    embedding_model: Optional[str] = None
 
 class SearchRequest(BaseModel):
     query: str
     collection_name: str
     n_results: int = settings.DEFAULT_SEARCH_RESULTS
     threshold: float = settings.DEFAULT_SIMILARITY_THRESHOLD
+    embedding_model: Optional[str] = None

@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from typing import List
 from models.document import Document, BatchDocumentRequest, SearchRequest
-from service.chromadb import chroma_service
+from service.chromadb import ChromaDBService
 from chunkers import SmartChunker
 
 app = FastAPI()
@@ -10,6 +10,7 @@ app = FastAPI()
 async def add_documents(request: BatchDocumentRequest):
     try:
         # Initialize smart chunker
+        chroma_service = ChromaDBService(request.embedding_model)
         smart_chunker = SmartChunker()
         
         # Process each document with smart chunking
@@ -103,6 +104,7 @@ async def delete_documents(collection_name: str, doc_ids: List[str]):
 @app.post("/api/search_similarity")
 async def search_similarity(request: SearchRequest):
     try:
+        chroma_service = ChromaDBService(request.embedding_model)
         results = chroma_service.search_similarity(
             collection_name=request.collection_name,
             query=request.query,
