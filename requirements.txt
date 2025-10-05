@@ -8,3 +8,4 @@ python-dotenv>=0.19.0
 click>=8.0.0
 rich>=10.0.0
 openai
+pinecone>=4.0.0
