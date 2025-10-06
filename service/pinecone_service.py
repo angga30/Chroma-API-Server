@@ -1,4 +1,6 @@
 import json
+import time
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 from pinecone import Pinecone, ServerlessSpec
 from config import settings
@@ -21,6 +23,8 @@ class PineconeService:
         if not self.pc:
             raise Exception("Pinecone API key not configured")
         index_name = self._index_name(name)
+        if index_name in self._index_cache:
+            return self._index_cache[index_name]
 
         if not self.pc.has_index(index_name):
             self.pc.create_index_for_model(
@@ -52,7 +56,7 @@ class PineconeService:
             meta["content"] = docs[i]
             vectors.append({"id": vid, "content": docs[i], "metadata": json.dumps(meta)})
 
-        index.upsert("default-namespace", vectors)
+        index.upsert_records("default-namespace", vectors)
         return ids
 
     def update_documents(self, collection_name: str, doc_ids: List[str], chunks: List[Dict[str, Any]]) -> int:
@@ -79,7 +83,16 @@ class PineconeService:
         threshold: float = settings.DEFAULT_SIMILARITY_THRESHOLD,
         where: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, List]:
+        start_ts = time.time()
+        print(
+            f"[Pinecone] search start at {datetime.now().isoformat()} "
+            f"collection='{collection_name}' query='{query}' n_results={n_results}"
+        )
         index = self._get_or_create_index(collection_name)
+        duration_ms = (time.time() - start_ts) * 1000
+        print(
+            f"[Pinecone] get or create collection in {duration_ms:.2f} ms, "
+        )
         res = index.search(
             namespace="default-namespace", 
             query={
@@ -88,14 +101,24 @@ class PineconeService:
             },
             fields=["content", "metadata"]
         )
-
+        print(res)
+        duration_ms = (time.time() - start_ts) * 1000
+        print(
+            f"[Pinecone] search to rag in {duration_ms:.2f} ms, "
+            f"hits={len(res['result']['hits'])}"
+        )
         filtered_results = {"ids": [], "distances": [], "metadatas": [], "documents": []}
         for match in res["result"]["hits"]:
-            filtered_results["ids"].append(match["id"])
-            filtered_results["distances"].append(match["score"])
+            filtered_results["ids"].append(match["_id"])
+            filtered_results["distances"].append(match["_score"])
             meta = match["fields"].get("metadata") or {}
             filtered_results["metadatas"].append(json.loads(meta))
             filtered_results["documents"].append(match["fields"].get("content", ""))
+        duration_ms = (time.time() - start_ts) * 1000
+        print(
+            f"[Pinecone] search finished in {duration_ms:.2f} ms, "
+            f"hits={len(filtered_results['ids'])}"
+        )
         return filtered_results
 
     def list_collections(self) -> List[str]:
