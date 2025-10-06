@@ -16,6 +16,7 @@ class PineconeService:
         self._index_cache: Dict[str, Any] = {}
 
     def _index_name(self, name: str) -> str:
+        name = name.replace("_", "-")
         prefix = settings.PINECONE_INDEX_PREFIX
         return f"{prefix}-{name}" if prefix else name
 
