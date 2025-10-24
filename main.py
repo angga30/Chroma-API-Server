@@ -27,7 +27,7 @@ async def add_documents(request: BatchDocumentRequest):
             )
             
             # delete first for related chunks
-            service.delete_by_parent_id(request.collection_name, doc.uid)
+            # service.delete_by_parent_id(request.collection_name, doc.uid)
 
             # Process each chunk
             for chunk in chunks:
