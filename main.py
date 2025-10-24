@@ -38,7 +38,7 @@ async def add_documents(request: BatchDocumentRequest):
                 combined_metadata = doc.metadata.copy()
                 combined_metadata.update(chunk['metadata'])
                 combined_metadata['parent_document_id'] = doc.uid
-                
+                print(combined_metadata)
                 all_chunks.append({
                     "id": chunk_id,
                     "content": chunk['content'],

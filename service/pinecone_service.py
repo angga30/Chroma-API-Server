@@ -79,6 +79,7 @@ class PineconeService:
                 metadata[key] = json.dumps(value)
             elif not isinstance(value, (str, int, float, bool)):
                 metadata[key] = str(value)
+        print("flatten_metadata:", metadata)
         return metadata
 
     def add_documents(self, collection_name: str, chunks: List[Dict[str, Any]]) -> List[str]:
