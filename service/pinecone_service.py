@@ -92,7 +92,7 @@ class PineconeService:
         for i, vid in enumerate(ids):
             meta = metas[i].copy() if metas[i] else {}
             meta["content"] = docs[i]
-            vectors.append({"id": vid, "content": docs[i], "metadata": self.flatten_metadata(meta)})
+            vectors.append({"id": vid, "content": docs[i], "metadata": json.dumps(self.flatten_metadata(meta))})
         
         index.upsert_records("default-namespace", vectors)
         return ids
