@@ -157,8 +157,14 @@ class PineconeService:
         for match in res["result"]["hits"]:
             filtered_results["ids"].append(match["_id"])
             filtered_results["distances"].append(match["_score"])
-            meta = match["fields"].get("metadata") or {}
-            filtered_results["metadatas"].append(json.loads(meta))
+            metas = {}
+
+            for key, value in match["fields"].items():
+                if key == "content":
+                    continue
+                metas[key] = value
+
+            filtered_results["metadatas"].append(metas)
             filtered_results["documents"].append(match["fields"].get("content", ""))
         duration_ms = (time.time() - start_ts) * 1000
         print(
