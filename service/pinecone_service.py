@@ -146,7 +146,7 @@ class PineconeService:
                 "inputs": {"text": query}, 
                 "top_k": n_results
             },
-            fields=["content", "metadata"]
+            # fields=["content", "metadata"]
         )
         duration_ms = (time.time() - start_ts) * 1000
         print(
