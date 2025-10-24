@@ -121,6 +121,7 @@ async def search_similarity(request: SearchRequest):
         )
         return results
     except Exception as e:
+        print(f"Error processing search similarity: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/collections")
