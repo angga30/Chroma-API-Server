@@ -13,19 +13,43 @@ class PineconeService:
     def __init__(self, embedding_model: Optional[str] = None):
         self.pc = Pinecone(api_key=settings.PINECONE_API_KEY) if settings.PINECONE_API_KEY else None
         self.embedding_model = embedding_model or settings.OPENAI_MODEL_NAME
-        self._index_cache: Dict[str, Any] = {}
+        self._index_cache: Dict[str, Dict[str, Any]] = {}
+        self._cache_expiry_hours = 2
 
     def _index_name(self, name: str) -> str:
         name = name.replace("_", "-")
         prefix = settings.PINECONE_INDEX_PREFIX
         return f"{prefix}-{name}" if prefix else name
 
+    def _is_cache_expired(self, index_name: str) -> bool:
+        """Check if cached index has expired (older than 2 hours)."""
+        if index_name not in self._index_cache:
+            return True
+        
+        cache_entry = self._index_cache[index_name]
+        cached_time = cache_entry.get('timestamp', 0)
+        current_time = time.time()
+        expiry_seconds = self._cache_expiry_hours * 3600  # Convert hours to seconds
+        
+        return (current_time - cached_time) > expiry_seconds
+
+    def _clear_expired_cache(self, index_name: str) -> None:
+        """Remove expired cache entry."""
+        if index_name in self._index_cache:
+            del self._index_cache[index_name]
+
     def _get_or_create_index(self, name: str):
         if not self.pc:
             raise Exception("Pinecone API key not configured")
         index_name = self._index_name(name)
-        if index_name in self._index_cache:
-            return self._index_cache[index_name]
+        
+        # Check if cache exists and is not expired
+        if index_name in self._index_cache and not self._is_cache_expired(index_name):
+            return self._index_cache[index_name]['index']
+        
+        # Clear expired cache if it exists
+        if self._is_cache_expired(index_name):
+            self._clear_expired_cache(index_name)
 
         if not self.pc.has_index(index_name):
             self.pc.create_index_for_model(
@@ -39,11 +63,23 @@ class PineconeService:
             )
 
         index = self.pc.Index(index_name)
-        self._index_cache[index_name] = index
+        # Store index with timestamp for expiry tracking
+        self._index_cache[index_name] = {
+            'index': index,
+            'timestamp': time.time()
+        }
         return index
 
     def get_or_create_collection(self, name: str):
         return self._get_or_create_index(name)
+
+    def flatten_metadata(self, metadata):
+        for key, value in metadata.items():
+            if isinstance(value, (dict, list)):
+                metadata[key] = json.dumps(value)
+            elif not isinstance(value, (str, int, float, bool)):
+                metadata[key] = str(value)
+        return metadata
 
     def add_documents(self, collection_name: str, chunks: List[Dict[str, Any]]) -> List[str]:
         index = self._get_or_create_index(collection_name)
@@ -55,10 +91,19 @@ class PineconeService:
         for i, vid in enumerate(ids):
             meta = metas[i].copy() if metas[i] else {}
             meta["content"] = docs[i]
-            vectors.append({"id": vid, "content": docs[i], "metadata": json.dumps(meta)})
-
+            vectors.append({"id": vid, "content": docs[i], "metadata": self.flatten_metadata(meta)})
+        
         index.upsert_records("default-namespace", vectors)
         return ids
+
+    def delete_by_parent_id(self, collection_name: str, parent_id: str) -> None:
+        index = self._get_or_create_index(collection_name)
+        index.delete(
+            namespace='example-namespace',
+            filter={
+                "parent_document_id": {"$eq": parent_id}
+            }
+        )
 
     def update_documents(self, collection_name: str, doc_ids: List[str], chunks: List[Dict[str, Any]]) -> int:
         index = self._get_or_create_index(collection_name)
@@ -102,7 +147,6 @@ class PineconeService:
             },
             fields=["content", "metadata"]
         )
-        print(res)
         duration_ms = (time.time() - start_ts) * 1000
         print(
             f"[Pinecone] search to rag in {duration_ms:.2f} ms, "

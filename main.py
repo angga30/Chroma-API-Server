@@ -18,6 +18,7 @@ async def add_documents(request: BatchDocumentRequest):
         
         for doc in request.documents:
             # Apply smart chunking
+            
             chunks = smart_chunker.chunk(
                 content=doc.content,
                 content_type=doc.content_type,
@@ -25,6 +26,9 @@ async def add_documents(request: BatchDocumentRequest):
                 chunk_overlap=doc.chunk_overlap
             )
             
+            # delete first for related chunks
+            service.delete_by_parent_id(request.collection_name, doc.uid)
+
             # Process each chunk
             for chunk in chunks:
                 # Generate a unique ID for each chunk
@@ -48,6 +52,7 @@ async def add_documents(request: BatchDocumentRequest):
         
         return {"ids": [], "message": "No documents to process"}
     except Exception as e:
+        print(f"Error processing documents: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/update_documents/{collection_name}")
@@ -92,6 +97,7 @@ async def update_documents(collection_name: str, documents: List[Document], doc_
         chunks_updated = service.update_documents(collection_name, doc_ids, all_chunks)
         return {"message": f"Documents updated successfully with {chunks_updated} new chunks"}
     except Exception as e:
+        print(f"Error processing documents: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/delete_documents/{collection_name}")
