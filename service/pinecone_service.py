@@ -92,7 +92,7 @@ class PineconeService:
         for i, vid in enumerate(ids):
             meta = metas[i].copy() if metas[i] else {}
             meta["content"] = docs[i]
-            vectors.append({"id": vid, "content": docs[i], "metadata": json.dumps(self.flatten_metadata(meta))})
+            vectors.append({"id": vid, "content": docs[i], **self.flatten_metadata(meta)})
         
         index.upsert_records("default-namespace", vectors)
         return ids
@@ -177,3 +177,72 @@ class PineconeService:
             return
         index_name = self._index_name(name)
         self.pc.delete_index(index_name)
+
+    def get_documents_by_metadata(
+        self,
+        collection_name: str,
+        metadata_filter: Dict[str, Any],
+        limit: int = 100
+    ) -> Dict[str, List]:
+        """
+        Retrieve documents from Pinecone based on metadata filter.
+        
+        Args:
+            collection_name: Name of the collection to search in
+            metadata_filter: Dictionary of metadata key-value pairs to filter by
+            limit: Maximum number of documents to return (default: 100)
+            
+        Returns:
+            Dictionary with keys: ids, metadatas, documents
+        """
+        start_ts = time.time()
+        print(
+            f"[Pinecone] get_documents_by_metadata start at {datetime.now().isoformat()} "
+            f"collection='{collection_name}' filter={metadata_filter} limit={limit}"
+        )
+        
+        index = self._get_or_create_index(collection_name)
+        
+        try:
+            # Use Pinecone's query with metadata filter
+            # Note: This uses a dummy vector query with metadata filter
+            # Since Pinecone requires a vector for querying, we'll use a zero vector
+            # and rely on the metadata filter to get the desired results
+            res = index.query(
+                namespace="default-namespace",
+                vector=[0.0] * 1536,  # Dummy vector (adjust dimensions as needed)
+                top_k=limit,
+                include_metadata=True,
+                include_values=False,
+                filter=metadata_filter
+            )
+            
+            duration_ms = (time.time() - start_ts) * 1000
+            print(
+                f"[Pinecone] metadata query completed in {duration_ms:.2f} ms, "
+                f"matches={len(res.matches)}"
+            )
+            
+            # Format results to match expected structure
+            filtered_results = {"ids": [], "metadatas": [], "documents": []}
+            
+            for match in res.matches:
+                filtered_results["ids"].append(match.id)
+                filtered_results["metadatas"].append(match.metadata or {})
+                # Extract content from metadata if available
+                content = match.metadata.get("content", "") if match.metadata else ""
+                filtered_results["documents"].append(content)
+            
+            duration_ms = (time.time() - start_ts) * 1000
+            print(
+                f"[Pinecone] get_documents_by_metadata finished in {duration_ms:.2f} ms, "
+                f"results={len(filtered_results['ids'])}"
+            )
+            
+            return filtered_results
+            
+        except Exception as e:
+            print(f"[Pinecone] Error in get_documents_by_metadata: {str(e)}")
+            return {"ids": [], "metadatas": [], "documents": []}
+
+        
