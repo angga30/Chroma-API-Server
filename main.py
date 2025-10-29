@@ -10,6 +10,11 @@ app = FastAPI()
 async def add_documents(request: BatchDocumentRequest):
     try:
         # Initialize backend service and smart chunker
+        # Validate request size (400 KB limit)
+        request_size = len(request.json().encode('utf-8'))
+        if request_size > 400 * 1024:
+            raise HTTPException(status_code=413, detail="Request payload too large. Maximum allowed size is 400 KB.")
+            
         service = get_rag_service(request.rag_server, request.embedding_model)
         smart_chunker = SmartChunker()
         
