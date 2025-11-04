@@ -24,7 +24,7 @@ async def add_documents(request: BatchDocumentRequest):
         for doc in request.documents:
             # Delete existing chunks for this parent document before re-inserting
             try:
-                deleted = service.delete_by_parent_id(request.collection_name, doc.uid)
+                deleted = service.delete_by_parent_id(request.collection_name, str(doc.uid))
                 print(f"Deleted related chunks for parent_document_id={doc.uid}: {deleted}")
             except Exception as de:
                 print(f"Warning: failed to delete related chunks for parent_document_id={doc.uid}: {de}")
