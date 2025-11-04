@@ -100,7 +100,7 @@ class PineconeService:
     def delete_by_parent_id(self, collection_name: str, parent_id: str) -> None:
         index = self._get_or_create_index(collection_name)
         index.delete(
-            namespace='example-namespace',
+            namespace='default-namespace',
             filter={
                 "parent_document_id": {"$eq": parent_id}
             }
