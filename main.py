@@ -22,8 +22,14 @@ async def add_documents(request: BatchDocumentRequest):
         all_chunks = []
         
         for doc in request.documents:
-            # Apply smart chunking
+            # Delete existing chunks for this parent document before re-inserting
+            try:
+                deleted = service.delete_by_parent_id(request.collection_name, doc.uid)
+                print(f"Deleted related chunks for parent_document_id={doc.uid}: {deleted}")
+            except Exception as de:
+                print(f"Warning: failed to delete related chunks for parent_document_id={doc.uid}: {de}")
             
+            # Apply smart chunking
             chunks = smart_chunker.chunk(
                 content=doc.content,
                 content_type=doc.content_type,
@@ -31,9 +37,6 @@ async def add_documents(request: BatchDocumentRequest):
                 chunk_overlap=doc.chunk_overlap
             )
             
-            # delete first for related chunks
-            # service.delete_by_parent_id(request.collection_name, doc.uid)
-
             # Process each chunk
             for chunk in chunks:
                 # Generate a unique ID for each chunk
