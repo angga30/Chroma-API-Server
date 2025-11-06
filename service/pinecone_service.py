@@ -155,17 +155,21 @@ class PineconeService:
         )
         filtered_results = {"ids": [], "distances": [], "metadatas": [], "documents": []}
         for match in res["result"]["hits"]:
+            score = match.get("_score", 0.0)
+            if threshold is not None and score < threshold:
+                continue
+
             filtered_results["ids"].append(match["_id"])
-            filtered_results["distances"].append(match["_score"])
+            filtered_results["distances"].append(score)
             metas = {}
 
-            for key, value in match["fields"].items():
+            for key, value in match.get("fields", {}).items():
                 if key == "content":
                     continue
                 metas[key] = value
 
             filtered_results["metadatas"].append(metas)
-            filtered_results["documents"].append(match["fields"].get("content", ""))
+            filtered_results["documents"].append(match.get("fields", {}).get("content", ""))
         duration_ms = (time.time() - start_ts) * 1000
         print(
             f"[Pinecone] search finished in {duration_ms:.2f} ms, "
