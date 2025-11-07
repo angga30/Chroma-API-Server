@@ -144,7 +144,8 @@ class PineconeService:
             namespace="default-namespace", 
             query={
                 "inputs": {"text": query}, 
-                "top_k": n_results
+                "top_k": n_results,
+                # "filter": where
             },
             # fields=["content", "metadata"]
         )
