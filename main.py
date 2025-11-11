@@ -125,7 +125,8 @@ async def search_similarity(request: SearchRequest):
             collection_name=request.collection_name,
             query=request.query,
             n_results=request.n_results,
-            threshold=request.threshold
+            threshold=request.threshold,
+            where=request.where
         )
         return results
     except Exception as e:

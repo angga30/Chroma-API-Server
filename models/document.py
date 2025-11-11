@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, validator
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 from chunkers import SmartChunker
 from config import settings
 
@@ -36,3 +36,4 @@ class SearchRequest(BaseModel):
     threshold: float = settings.DEFAULT_SIMILARITY_THRESHOLD
     embedding_model: Optional[str] = None
     rag_server: Optional[str] = settings.RAG_SERVER
+    where: Optional[Dict[str, Any]] = None
