@@ -140,13 +140,19 @@ class PineconeService:
         print(
             f"[Pinecone] get or create collection in {duration_ms:.2f} ms, "
         )
+
+        query = {
+            "inputs": {"text": query}, 
+            "top_k": n_results,
+            # "filter": where
+        }
+
+        if where:
+            query["filter"] = where
+
         res = index.search(
             namespace="default-namespace", 
-            query={
-                "inputs": {"text": query}, 
-                "top_k": n_results,
-                # "filter": where
-            },
+            query=query,
             # fields=["content", "metadata"]
         )
         duration_ms = (time.time() - start_ts) * 1000
